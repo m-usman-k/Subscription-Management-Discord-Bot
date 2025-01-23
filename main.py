@@ -1,6 +1,6 @@
+import time
 import discord, os
 import csv, requests, bs4
-from datetime import datetime, timedelta
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -44,17 +44,18 @@ def update_user_data(userid, username):
     for row in data:
         if row['userid'] == str(userid):
             user_found = True
-            last_trial = datetime.strptime(row['timestamp'], '%Y-%m-%d %H:%M:%S')
-            if datetime.now() - last_trial > timedelta(days=180):
-                row['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            last_trial = row['timestamp']
+            if int(time.time()) > int(last_trial):
+                row['timestamp'] = int(time.time())+180*24*60*60
                 write_csv(data)
-                return True
-            else:
                 return False
+            else:
+                return last_trial
     if not user_found:
-        data.append({'userid': str(userid), 'username': username, 'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        this_timestamp = int(time.time())+180*24*60*60
+        data.append({'userid': str(userid), 'username': username, 'timestamp': this_timestamp})
         write_csv(data)
-        return True
+        return False
 
 @bot.event
 async def on_ready():
@@ -73,7 +74,8 @@ class CustomView(discord.ui.View):
     @discord.ui.button(label='Check Eligibility', style=discord.ButtonStyle.primary)
     async def on_button_click(self, interaction: discord.Interaction, button: discord.ui.Button):
         user = interaction.user
-        if update_user_data(user.id, user.name):
+        is_timestamp = update_user_data(user.id, user.name)
+        if not is_timestamp:
             try:
                 file_path = get_file_text_as_file()
                 await user.send("Here is your trial content:", file=discord.File(file_path))
@@ -85,6 +87,6 @@ class CustomView(discord.ui.View):
                 if os.path.exists(file_path):
                     os.remove(file_path)
         else:
-            await interaction.response.send_message('You are not eligible for a trial at this time.', ephemeral=True)
+            await interaction.response.send_message(f'Not Eligible! Request Again In <t:{is_timestamp}:R>', ephemeral=True)
 
 bot.run(BOT_TOKEN)
